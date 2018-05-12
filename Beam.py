@@ -1,143 +1,131 @@
 import numpy as np
-import sys
-from scipy.constants import epsilon_0, pi
-import math
-import matplotlib.pyplot as plt
+
+import Line
+import density
 
 
 class Beam:
-    # current [mA], energy [keV],r [cm]
-    def __init__(self, beam_descriptor, current, energy, particle="Li_7", r=2.5):
-        self.beam_descriptor = beam_descriptor
-        self.r = r * 1e-2
-        self.v_z, self.mass_per_q_ratio = \
-            self.convert_parameters(energy * 1e3, particle)
-        self.I = current * 1e-3
+    def __init__(self, calculator, z, start_positions):
+        self.I = calculator.I
+        self.energy = calculator.energy
+        self.neutralization_point = calculator.neutralization_point
+        self.v_z = calculator.v_z
+        self.dt = calculator.dt
+        self.start_point = calculator.beam_descriptor.start_points
+        self.end_point = calculator.beam_descriptor.end_points
+        self.r = calculator.r
 
-        self.start_charge_density_values = []
-        self.charge_density_values = []
-        self.end_charge_density_values = []
-        self.dt = 0
-        self.Q = 0
+        self.z = z
 
-        self.start_positions = []
-        self.end_positions = []
+        self.neutralization_index = np.inf
+        if self.neutralization_point != np.inf:
+            for i in range(len(z)):
+                if i > 0 and z[i] > self.neutralization_point:
+                    self.neutralization_index = i-1
+                    break
 
-    @staticmethod
-    def convert_parameters(energy, particle):
-        joule_energy = energy * 1.6e-19  # J (1 eV = 1.6 * 10^-19 J)
-        if particle == "Li_7":
-            m = 1.16e-26  # kg [one particle mass] (atomic_mass = 6.95 g/mol, Avogadro_number = 6*10^23)
-            q = 3 * 1.6e-19  # C [charge of pne particle]
-            velocity = np.sqrt(2 * joule_energy / m)  # m/s (E_kin = 1/2 * m*v^2 => v^2 = 2 * E_kin/m)
-        else:
-            return 0, 0, 0
+        self.result_positions = np.zeros(shape=(len(z), len(start_positions)))
+        self.result_densities = np.zeros(shape=(len(z), len(start_positions)))
+        self.current_index = 0
 
-        mass_per_q_ratio = m / q
+    def append_result(self, positions, density_values):
+        self.result_positions[self.current_index] = positions
+        self.result_densities[self.current_index] = density_values
+        self.current_index = self.current_index + 1
 
-        return velocity, mass_per_q_ratio
+    def start_shape(self):
+        return self.result_positions[0], self.result_densities[0]/self.dt
 
-    def calculate_beam(self, r_resolution, z_interval, v_r_field=None):
-        # set up fields
-        self.dt = float(float(z_interval) / float(self.v_z))
-        self.Q = self.I * self.dt
-        positions, density_values = \
-            Beam.get_shape(0, self.r, r_resolution, Beam.gaussian, self.beam_descriptor.parameter_start)
-        self.charge_density_values = self.Q / np.trapz(density_values, positions) * density_values
-        self.start_charge_density_values = self.charge_density_values
-        self.start_positions = positions
+    def end_shape(self):
+        return self.result_positions[-1], self.result_densities[-1]/self.dt
 
-        # set up R velocity
-        if v_r_field is None:
-            v_r_field = np.zeros(r_resolution)
+    def before_neutralization_shape(self):
+        if self.neutralization_index == np.inf:
+            return self.end_shape()
+        return self.result_positions[self.neutralization_index], self.result_densities[self.neutralization_index]/self.dt
 
-        # set up Z direction array
-        start_point = self.beam_descriptor.start_points
-        end_point = self.beam_descriptor.end_points
-        z = np.arange(start=start_point, stop=end_point, step=z_interval)
+    def get_maximum_differences(self):
+        start_maximum = max(self.result_densities[0])
+        maximum_differences = np.zeros(shape=self.z.shape)
+        for i in range(len(self.z)):
+            maximum_differences[i] = max(self.result_densities[i])/start_maximum
+        return maximum_differences
 
-        # do the steps
-        print "Number of steps: " + str(len(z))
-        for i in z:
-            print "Actual position: " + str(i) + " cm"
-            positions, v_r_field = self.step(z_interval, positions, v_r_field)
-            # self.charge_density_values = self.Q / np.trapz(self.charge_density_values, positions)\
-            #                              * self.charge_density_values
+    def get_std(self):
+        std = np.zeros(shape=self.z.shape)
+        for i in range(len(self.z)):
+            full_positions, full_density_values = density.mirror(self.result_positions[i], self.result_densities[i])
+            full_density_values = density.normalize(full_positions, full_density_values)
+            std[i] = density.std(full_positions, full_density_values)
+        return std
 
-        # return with the new density point positions
-        plt.show()
-        self.end_charge_density_values = self.charge_density_values
-        self.end_positions = positions
+    def get_kurtosis(self):
+        kurtosis = np.zeros(shape=self.z.shape)
+        for i in range(len(self.z)):
+            full_positions, full_density_values = density.mirror(self.result_positions[i], self.result_densities[i])
+            full_density_values = density.normalize(full_positions, full_density_values)
+            kurtosis[i] = density.kurtosis(full_positions, full_density_values)
+        return kurtosis
 
-    def step(self, dz, r, v_r_field):
-        # calculate E_r from density profile
-        E = self.E_r(r)
+    # def current_value_at_half_width(self, density_values, slice_of_beam):
+    #     charge = self.half_width_point_of_slice(density_values, slice_of_beam)[0]
+    #     return charge / 1
+    #
+    # def current_value_at_half_width_x(self, density_values, slice_of_beam, x):
+    #     point = self.half_width_point_of_slice(density_values, slice_of_beam)
+    #     neighbour_point_indexes = [0, 0]
+    #     for i in range(len(slice_of_beam)):
+    #         if i > 0 and slice_of_beam[i] > point[1]:
+    #             neighbour_point_indexes = [i - 1, i]
+    #             break
+    #
+    #     half_width_x_position_line = Line.Line([point[0], point[1]*x], [0, point[1]*x])
+    #     profile_line = Line.Line([density_values[neighbour_point_indexes[0]], slice_of_beam[neighbour_point_indexes[0]]],
+    #                              [density_values[neighbour_point_indexes[1]], slice_of_beam[neighbour_point_indexes[1]]])
+    #
+    #     cross = Line.cross(half_width_x_position_line, profile_line)
+    #     charge = cross[0]
+    #     return charge / 1
+    #
+    # def half_width_current_values(self):
+    #     HW_current_values = np.zeros(len(self.z))
+    #     for i in range(len(self.z)):
+    #         HW_current_values[i] = self.current_value_at_half_width(self.result_positions[i], self.result_positions[i])
+    #     return HW_current_values
+    #
+    # def half_width_current_values_x(self, x):
+    #     HW_current_values = np.zeros(len(self.z))
+    #     for i in range(len(self.z)):
+    #         HW_current_values[i] = self.current_value_at_half_width_x(self.result_positions[i], self.result_positions[i], x)
+    #     return HW_current_values
 
-        # calculate v_r field form density profile, E_r, and past v_r field
-        result_velocity_field = self.v_r(dz, r, E, v_r_field)
-        # plt.plot(r, E)
-        # plt.show()
-        # sys.exit()
-
-        # calculate new density positions from past positions and v_r field
-        result_r = self.q_profile(dz, r, result_velocity_field)
-
-        # return with the new positions and new v_r field
-        return result_r, result_velocity_field
-
-    def q_profile(self, dz, r, velocity_field):
-        # calculate time delay form z direction velocity and step size: dt = dz/v_z
-        result_r = np.zeros(shape=r.shape)
-        for i in range(len(r)):
-            # r(z+dz) = r(z) + v*dt
-            result_r[i] = r[i] + velocity_field[i] * self.dt
-        return result_r
-
-    def E_r(self, r):
-        E_r = np.zeros(shape=r.shape)
-        for i in range(len(r)):
-            if math.isinf(r[i]) or r[i] == 0:
-                # check for infinity
-                E_r[i] = 0
-            else:
-                E_r[i] = self.integral(r[i], r) / float(epsilon_0 * r[i])
-        # plt.plot(r, E_r)
-        # plt.axis([0, 25, 0, 40])
-        return E_r
-
-    def integral(self, r0, r):
-        E = 0
-        for i in range(len(r)):
-            if r[i] > 0:
-                r_ = r0 - r[i]
-                if math.isinf(r_):
-                    # check for infinity
-                    E = 0
-                elif r_ > 0:
-                # elif r_ != 0:
-                    E = E + self.charge_density_values[i] * r[i]
-        return E
-
-    def v_r(self, dz, r, E_r, velocity_field):
-        for i in range(len(r)):
-            # dv_r = E*dz/(m*v_z) --> m = m_i*dV
-            # F = qE
-            velocity_field[i] = float(velocity_field[i]) + \
-                             float(E_r[i]) * self.dt\
-                                / float(self.mass_per_q_ratio * self.charge_density_values[i])
-        # plt.plot(r, velocity_field)
-        # plt.axis([0, 25, 0, max(velocity_field)])
-        # plt.show()
-        return velocity_field
+    # @staticmethod
+    # def half_width_point_of_slice(density_values, positions):
+    #     half_value = max(density_values)/2
+    #     neighbour_point_indexes = [0, 0]
+    #     for i in range(len(density_values)):
+    #         if i > 0 and density_values[i] < half_value:
+    #             neighbour_point_indexes = [i-1, i]
+    #             break
+    #
+    #     half_value_line = Line.Line([half_value, 0], [half_value, 1])
+    #     profile_line = Line.Line([density_values[neighbour_point_indexes[0]], positions[neighbour_point_indexes[0]]],
+    #                              [density_values[neighbour_point_indexes[1]], positions[neighbour_point_indexes[1]]])
+    #
+    #     cross = Line.cross(half_value_line, profile_line)
+    #     return cross
 
     @staticmethod
-    def gaussian(x, parameters):
-        mu = parameters[0]
-        sig = parameters[1]
-        return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+    def current_density_vaule_at_R(R, density_values, positions):
+        neighbour_point_indexes = [0, 0]
+        for i in range(len(positions)):
+            if i > 0 and positions[i] > R:
+                neighbour_point_indexes = [i - 1, i]
+                break
 
-    @staticmethod
-    def get_shape(start, end, resolution, function, parameters):
-        positions = np.linspace(start, end, resolution)
-        density_values = function(positions, parameters)
-        return positions, density_values
+        R_line = Line.Line([0,R], [1,R])
+        profile_line = Line.Line([density_values[neighbour_point_indexes[0]], positions[neighbour_point_indexes[0]]],
+                                 [density_values[neighbour_point_indexes[1]], positions[neighbour_point_indexes[1]]])
+
+        cross = Line.cross(R_line, profile_line)
+        return cross

@@ -25,7 +25,7 @@ class BeamDescription:
                 if edge_points is None:
                     edge_points = np.array(float_list_from_a_line)
                 else:
-                    edge_points = np.array([edge_points] + [float_list_from_a_line])
+                    edge_points = np.array([edge_points] + [float_list_from_a_line]) * 1e-2
                 read_lines = read_lines + 1
             except Exception as e:
                 error_limit = error_limit - 1
