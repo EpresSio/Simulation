@@ -72,6 +72,7 @@ class BeamCalculator:
         actual_z = start_point
 
         beam = Beam(self, z, positions)
+        E = []
 
         # do the steps
         # print "Number of steps: " + str(len(z))
@@ -79,19 +80,26 @@ class BeamCalculator:
             actual_z = actual_z + z_interval
             # print "Actual position: " + str(i * 1e2) + " cm"
             if actual_z < self.neutralization_point:
-                positions, v_r_field = self.step(z_interval, positions, v_r_field)
+                positions, v_r_field, E = self.step(z_interval, positions, v_r_field)
                 self.charge_density_values = self.Q / np.trapz(self.charge_density_values, positions) \
                                              * self.charge_density_values
             else:
                 positions = self.step_after_neutralization(z_interval, positions, v_r_field)
                 self.charge_density_values = self.Q / np.trapz(self.charge_density_values, positions) \
                                              * self.charge_density_values
-            beam.append_result(positions, self.charge_density_values)
+
+            beam.append_result(positions, self.charge_density_values, self.calculateFI(E, positions))
 
         # return with the new density point positions
         self.end_charge_density_values = self.charge_density_values
         self.end_positions = positions
         return beam
+
+    def calculateFI(self, E, positions):
+        FI = np.zeros(shape=(len(E)))
+        for i in range(len(E)):
+            FI[i] = -np.trapz(E[:i], positions[:i])
+        return FI
 
     def step(self, dz, r, v_r_field):
         # calculate E_r from density profile
@@ -104,7 +112,7 @@ class BeamCalculator:
         result_r = self.q_profile(dz, r, result_velocity_field)
 
         # return with the new positions and new v_r field
-        return result_r, result_velocity_field
+        return result_r, result_velocity_field, E
 
     def step_after_neutralization(self, dz, r, v_r_field):
         result_r = self.q_profile(dz, r, v_r_field)

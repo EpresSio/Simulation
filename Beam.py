@@ -26,11 +26,13 @@ class Beam:
 
         self.result_positions = np.zeros(shape=(len(z), len(start_positions)))
         self.result_densities = np.zeros(shape=(len(z), len(start_positions)))
+        self.FI = np.zeros(shape=(len(z), len(start_positions)))
         self.current_index = 0
 
-    def append_result(self, positions, density_values):
+    def append_result(self, positions, density_values, FI):
         self.result_positions[self.current_index] = positions
         self.result_densities[self.current_index] = density_values
+        self.FI[self.current_index] = FI
         self.current_index = self.current_index + 1
 
     def start_shape(self):

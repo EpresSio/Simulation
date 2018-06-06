@@ -48,8 +48,8 @@ class BeamProfile:
             beam_profile_file.readline()
             self.shape = int(re.search(r'\d+', beam_profile_file.readline()).group())
             self.divergent = int(re.search(r'\d+', beam_profile_file.readline()).group())
-            self.parameter_start = get_float_list_from_a_line(beam_profile_file)/100
-            self.parameter_end = get_float_list_from_a_line(beam_profile_file)/100
+            self.parameter_start = get_float_list_from_a_line(beam_profile_file)/100/2
+            self.parameter_end = get_float_list_from_a_line(beam_profile_file)/100/2
         except AttributeError as e:
             print "File not good"
 
