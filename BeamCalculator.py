@@ -1,7 +1,10 @@
+import sys
+
 import numpy as np
 from scipy.constants import epsilon_0
 import math
 
+import matplotlib.pyplot as plt
 from Beam import Beam
 
 
@@ -15,6 +18,7 @@ class BeamCalculator:
         self.v_z, self.mass_per_q_ratio = \
             self.convert_parameters(energy * 1e3, particle)
         self.I = current * 1e-3
+        self.electron_factor = 0
 
         self.start_charge_density_values = []
         self.charge_density_values = []
@@ -43,13 +47,14 @@ class BeamCalculator:
             q = 3 * 1.6e-19  # C [charge of one particle]
             velocity = np.sqrt(2 * joule_energy / m)  # m/s (E_kin = 1/2 * m*v^2 => v^2 = 2 * E_kin/m)
         else:
-            return 0, 0
+            print str(particle) + " not supported"
+            return 0, 1
 
         mass_per_q_ratio = m / q
 
         return velocity, mass_per_q_ratio
 
-    def calculate_beam(self, r_resolution, z_interval, v_r_field=None):
+    def calculate_beam(self, r_resolution, z_interval, v_r_field=None, gas_density = 0):
         z_interval = z_interval * 1e-2
         # set up fields
         self.dt = float(float(z_interval) / float(self.v_z))
@@ -135,7 +140,8 @@ class BeamCalculator:
                 # check for infinity
                 E_r[i] = 0
             else:
-                E_r[i] = self.integral(r[i], r) / float(epsilon_0 * r[i])
+                E_r[i] = self.integral(r[i], r) / float(epsilon_0 * r[i]) * 1000
+                # E_r[i] = np.trapz(self.charge_density_values*r, r) / float(epsilon_0 * r[i])
         return E_r
 
     def integral(self, r0, r):
@@ -146,7 +152,10 @@ class BeamCalculator:
                 # check for infinity
                 E = 0
             elif r_ >= 0:
-                E = E + self.charge_density_values[i] * r[i]
+                if i > 0:
+                    E = E + self.charge_density_values[i] *(1+self.electron_factor) * r[i] * (r[i]-r[i-1])
+                else:
+                    E = self.charge_density_values[i] *(1+self.electron_factor) * r[i]
         return E
 
     def v_r(self, r, E_r, velocity_field):

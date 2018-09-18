@@ -48,17 +48,41 @@ def plot_FI(beam):
     plt.legend()
     plt.show()
 
-def main():
-    beamDescription = BeamDescription.get_description_from_files(
-        open("beamdescription/beam_1_profile.dat", "r"),
-        open("beamdescription/beam.dat", "r"))
-    calculator = BeamCalculator(beamDescription, 2, 50, r=5, neutralization_point=50)
-    beam = calculator.calculate_beam(r_resolution=60, z_interval=0.5)
-    # plot_beam(beam)
-    plot_FI(beam)
 
 
-main()
+
+# def create_plots_at_current_region(descriptor, I0, I1, interval, E, neutralization_point=50, r=5, r_resolution=30,
+#                                    z_interval=1):
+#     I_range = np.arange(start=I0, stop=I1 + interval, step=interval)
+#
+#     FI = []
+#     R = 0
+#
+#     for i in range(len(I_range)):
+#         print(str(I_range[i]) + " mA")
+#         calculator = BeamCalculator(descriptor, I_range[i], E, r=r, neutralization_point=neutralization_point)
+#         beam = calculator.calculate_beam(r_resolution=r_resolution, z_interval=z_interval)
+#         if FI == []:
+#             R = np.linspace(0, beam.r, r_resolution)
+#             FI = np.zeros((len(I_range), r_resolution))
+#
+#         FI[i] = beam.FI[-1]
+#
+#     plt.plot(R, FI[-1])
+#     plt.show()
+#
+#     fig = plt.figure(figsize=(20, 10))
+#     ax1 = fig.add_subplot(111)
+#     ax1.set_title("Proportion of maximums")
+#     ax1.set_xlabel("I [mA]")
+#     ax1.set_ylabel("r [m]")
+#     cs1 = ax1.contourf(I_range, R, np.transpose(FI), 100, cmap=plt.cm.inferno)
+#     # cs1.ticks([cs1.vmin, cs1.vmax])
+#     cb1 = fig.colorbar(cs1, shrink=0.9)
+#     cb1.set_ticks([cb1._boundaries[0], (cb1._boundaries[0]+cb1._boundaries[-1])/2, cb1._boundaries[-1]])
+#
+#     plt.show()
+
 #
 # def create_plots_at_current_region(descriptor, I0, I1, interval, E, neutralization_point=50, r=10, r_resolution=30,
 #                                    z_interval=1):
@@ -153,8 +177,18 @@ main()
 #         plt.clf()
 #
 #
-# beamDescription = BeamDescription.get_description_from_files(
-#     open("beamdescription/beam_1_profile.dat", "r"),
-#     open("beamdescription/beam.dat", "r"))
-#
-# create_plots_at_current_region(beamDescription, 0.1, 10, 0.5, 50)
+beamDescription = BeamDescription.get_description_from_files(
+    open("beamdescription/beam_1_profile.dat", "r"),
+    open("beamdescription/beam.dat", "r"))
+
+def main():
+    beamDescription = BeamDescription.get_description_from_files(
+        open("beamdescription/beam_1_profile.dat", "r"),
+        open("beamdescription/beam.dat", "r"))
+    calculator = BeamCalculator(beamDescription, 10, 50, r=5, neutralization_point=50)
+    beam = calculator.calculate_beam(r_resolution=100, z_interval=1)
+    plot_beam(beam)
+    # plot_FI(beam)
+
+# create_plots_at_current_region(beamDescription, 0.5, 1, 0.5, 50)
+main()
