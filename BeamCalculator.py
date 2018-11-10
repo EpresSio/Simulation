@@ -10,7 +10,8 @@ from Beam import Beam
 
 class BeamCalculator:
     # current [mA], energy [keV],r [cm], n_p [cm]
-    def __init__(self, beam_descriptor, current, energy, particle="Li_7", r=2.5, neutralization_point=np.inf):
+    def __init__(self, beam_descriptor, current, energy, particle="Li_7", r=2.5, neutralization_point=np.inf,
+                 gas_density=2.5e17):
         self.beam_descriptor = beam_descriptor
         self.energy = energy
         self.r = r * 1e-2
@@ -18,7 +19,9 @@ class BeamCalculator:
         self.v_z, self.mass_per_q_ratio = \
             self.convert_parameters(energy * 1e3, particle)
         self.I = current * 1e-3
-        self.electron_factor = 0
+        self.gas_density = gas_density
+        self.sigma = 1e-16
+        self.electron_factor = self.sigma * self.v_z * self.gas_density
 
         self.start_charge_density_values = []
         self.charge_density_values = []
@@ -30,10 +33,12 @@ class BeamCalculator:
         self.end_positions = []
 
         beam_parameters_string = "Beam parameter:\n" \
-              "\tCurrent: " + str(current) + " mA\n" \
-              "\tEnergy: " + str(energy) + " keV\n" \
-              "\tStart point: " + str(beam_descriptor.start_points[0] * 1e2) + " cm\n" \
-              "\tEnd point: " + str(beam_descriptor.end_points[0] * 1e2) + " cm\n"
+                                 "\tCurrent: " + str(current) + " mA\n" \
+                                                                "\tEnergy: " + str(energy) + " keV\n" \
+                                                                                             "\tStart point: " + str(
+            beam_descriptor.start_points[0] * 1e2) + " cm\n" \
+                                                     "\tEnd point: " + str(
+            beam_descriptor.end_points[0] * 1e2) + " cm\n"
         if neutralization_point < np.inf:
             beam_parameters_string = beam_parameters_string + "\tNeutralization point: " + str(
                 neutralization_point) + " cm\n"
@@ -54,13 +59,15 @@ class BeamCalculator:
 
         return velocity, mass_per_q_ratio
 
-    def calculate_beam(self, r_resolution, z_interval, v_r_field=None, gas_density = 0):
+    def calculate_beam(self, r_resolution, z_interval, v_r_field=None, gas_density=0):
         z_interval = z_interval * 1e-2
         # set up fields
         self.dt = float(float(z_interval) / float(self.v_z))
+        self.electron_factor = self.electron_factor * self.dt
         self.Q = self.I * self.dt
         positions, density_values = \
-            BeamCalculator.get_shape(0, self.r, r_resolution, BeamCalculator.gaussian, self.beam_descriptor.parameter_start)
+            BeamCalculator.get_shape(0, self.r, r_resolution, BeamCalculator.gaussian,
+                                     self.beam_descriptor.parameter_start)
 
         self.charge_density_values = self.Q / np.trapz(density_values, positions) * density_values
         self.start_charge_density_values = self.charge_density_values
@@ -73,7 +80,7 @@ class BeamCalculator:
         # set up Z direction array
         start_point = self.beam_descriptor.start_points
         end_point = self.beam_descriptor.end_points
-        z = np.arange(start=start_point, stop=end_point+z_interval, step=z_interval)
+        z = np.arange(start=start_point, stop=end_point + z_interval, step=z_interval)
         actual_z = start_point
 
         beam = Beam(self, z, positions)
@@ -153,9 +160,9 @@ class BeamCalculator:
                 E = 0
             elif r_ >= 0:
                 if i > 0:
-                    E = E + self.charge_density_values[i] *(1+self.electron_factor) * r[i] * (r[i]-r[i-1])
+                    E = E + self.charge_density_values[i] * (1 - self.electron_factor) * r[i] * (r[i] - r[i - 1])
                 else:
-                    E = self.charge_density_values[i] *(1+self.electron_factor) * r[i]
+                    E = self.charge_density_values[i] * (1 - self.electron_factor) * r[i]
         return E
 
     def v_r(self, r, E_r, velocity_field):
@@ -188,5 +195,3 @@ class BeamCalculator:
         positions = np.linspace(start, end, resolution)
         density_values = current_function(positions, parameters)
         return positions, density_values
-
-

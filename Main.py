@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 
 
 def plot_beam(beam):
-    plt.title("Beam shape \nI = " + str(beam.I * 1e3) + " mA, E = " + str(beam.energy) + " keV\n"
+    plt.title("Beam shape \nI = " + str(beam.I * 1e3) + " mA, E = " + str(
+        beam.energy) + " keV, Gas density = " + str(beam.gas_density) + " m^-2\n"
               + "Start point = " + str(beam.start_point[0]) + " m, End point = " + str(beam.end_point[0]) + " m, "
               + "Neutralization point = " + str(beam.neutralization_point) + " m")
 
@@ -47,8 +48,6 @@ def plot_FI(beam):
     plt.axis([r_min, r_max, q_min, q_max])
     plt.legend()
     plt.show()
-
-
 
 
 # def create_plots_at_current_region(descriptor, I0, I1, interval, E, neutralization_point=50, r=5, r_resolution=30,
@@ -181,14 +180,16 @@ beamDescription = BeamDescription.get_description_from_files(
     open("beamdescription/beam_1_profile.dat", "r"),
     open("beamdescription/beam.dat", "r"))
 
+
 def main():
     beamDescription = BeamDescription.get_description_from_files(
         open("beamdescription/beam_1_profile.dat", "r"),
         open("beamdescription/beam.dat", "r"))
-    calculator = BeamCalculator(beamDescription, 10, 50, r=5, neutralization_point=50)
+    calculator = BeamCalculator(beamDescription, 1, 50, r=5, neutralization_point=50)
     beam = calculator.calculate_beam(r_resolution=100, z_interval=1)
     plot_beam(beam)
     # plot_FI(beam)
+
 
 # create_plots_at_current_region(beamDescription, 0.5, 1, 0.5, 50)
 main()

@@ -14,6 +14,7 @@ class Beam:
         self.start_point = calculator.beam_descriptor.start_points
         self.end_point = calculator.beam_descriptor.end_points
         self.r = calculator.r
+        self.gas_density = calculator.gas_density
 
         self.z = z
 
