@@ -2,13 +2,14 @@ import numpy as np
 
 import Line
 import density
+from Shape import Shape
 
 
 class Beam:
     def __init__(self, calculator, z, start_positions):
         self.I = calculator.I
         self.energy = calculator.energy
-        self.neutralization_point = calculator.neutralization_point
+        self.neutralization_range = calculator.neutralization_range
         self.v_z = calculator.v_z
         self.dt = calculator.dt
         self.start_point = calculator.beam_descriptor.start_points
@@ -19,22 +20,22 @@ class Beam:
         self.z = z
 
         self.neutralization_index = np.inf
-        if self.neutralization_point != np.inf:
+        if self.neutralization_range[1] != np.inf:
             for i in range(len(z)):
-                if i > 0 and z[i] > self.neutralization_point:
+                if i > 0 and z[i] > self.neutralization_range[1]:
                     self.neutralization_index = i-1
                     break
 
+        self.result_shapes = []
         self.result_positions = np.zeros(shape=(len(z), len(start_positions)))
         self.result_densities = np.zeros(shape=(len(z), len(start_positions)))
         self.FI = np.zeros(shape=(len(z), len(start_positions)))
-        self.current_index = 0
 
-    def append_result(self, positions, density_values, FI):
-        self.result_positions[self.current_index] = positions
-        self.result_densities[self.current_index] = density_values
-        self.FI[self.current_index] = FI
-        self.current_index = self.current_index + 1
+    def append_result(self, shape, FI, current_index):
+        self.result_shapes.append(Shape(shape.positions, shape.values, shape.Q))
+        self.result_positions[current_index] = shape.positions
+        self.result_densities[current_index] = shape.values
+        self.FI[current_index] = FI
 
     def start_shape(self):
         return self.result_positions[0], self.result_densities[0]/self.dt

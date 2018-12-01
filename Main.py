@@ -1,38 +1,45 @@
-import sys
+# coding=utf-8
+from __future__ import unicode_literals
 
 from BeamCalculator import BeamCalculator
 from BeamDescriptor import BeamDescription
-import numpy as np
 
 import matplotlib.pyplot as plt
+import re
 
 
 def plot_beam(beam):
-    plt.title("Beam shape \nI = " + str(beam.I * 1e3) + " mA, E = " + str(
-        beam.energy) + " keV, Gas density = " + str(beam.gas_density) + " m^-2\n"
-              + "Start point = " + str(beam.start_point[0]) + " m, End point = " + str(beam.end_point[0]) + " m, "
-              + "Neutralization point = " + str(beam.neutralization_point) + " m")
+    p = re.compile(r'([-+]?\d*\.\d+|\d+)')
+    m = p.findall(str(beam.gas_density))
 
-    plt.plot(beam.start_shape()[0], beam.start_shape()[1], "k", label="Initial beam shape")
+    gas_density_string = "$" + str(m[0]) + " \cdot 10^{" + str(m[1]) + "}$"
+
+    plt.title("Nyaláb alak \nI = " + str(beam.I * 1e3) + " mA, E = " + str(
+        beam.energy) + " keV, Gáz sűrűség = " + gas_density_string + " $m^{-2}$\n"
+              + "Kezdő pont = " + str(beam.start_point[0]) + " m, Vég pont = " + str(beam.end_point[0]) + " m, \n"
+              + "Neutralizációs tartomány = " + str(beam.neutralization_range[0]) + "-" + str(beam.neutralization_range[1]) + " m")
+
+    plt.plot(beam.start_shape()[0], beam.start_shape()[1], "k", label="Kezdeti nyaláb alak")
     plt.plot(beam.before_neutralization_shape()[0], beam.before_neutralization_shape()[1], 'y--',
-             label="Beam shape at neutralization point")
-    plt.plot(beam.end_shape()[0], beam.end_shape()[1], 'r', label="Final beam shape")
+             label="Nyaláb alak a neutralizáció után")
+    plt.plot(beam.end_shape()[0], beam.end_shape()[1], 'r', label="Végső nyaláb alak")
 
     q_min = min(beam.start_shape()[1])
     q_max = max(beam.start_shape()[1])
     r_min = 0
     r_max = beam.r
-    plt.ylabel("Current density [mA/m^3]")
-    plt.xlabel("Radial length [m]")
+    plt.ylabel("Áram sűrűség [$\\frac{mA}{m^3}$]")
+    plt.xlabel("Radiális pozíció [m]")
     plt.axis([r_min, r_max, q_min, q_max])
     plt.legend()
     plt.show()
 
 
 def plot_FI(beam):
-    plt.title("Potential \nI = " + str(beam.I * 1e3) + " mA, E = " + str(beam.energy) + " keV\n"
-              + "Start point = " + str(beam.start_point[0]) + " m, End point = " + str(beam.end_point[0]) + " m, "
-              + "Neutralization point = " + str(beam.neutralization_point) + " m")
+    plt.title("Potenciál \nI = " + str(beam.I * 1e3) + " mA, E = " + str(beam.energy) + " keV\n"
+              + "Kezdő pont = " + str(beam.start_point[0]) + " m, Vég pont = " + str(beam.end_point[0]) + " m, \n"
+              + "Neutralizációs tartomány = " + str(beam.neutralization_range[0]) + "-" + str(
+        beam.neutralization_range[1]) + " m")
 
     plt.plot(beam.result_positions[0], beam.FI[0], "k", label="Initial potential")
     plt.plot(beam.result_positions[beam.neutralization_index], beam.FI[beam.neutralization_index], 'y--',
@@ -43,8 +50,8 @@ def plot_FI(beam):
     q_max = max(beam.FI[0])
     r_min = 0
     r_max = beam.r
-    plt.ylabel("Potential [V]")
-    plt.xlabel("Radial length [m]")
+    plt.ylabel("Potenciál [V]")
+    plt.xlabel("Radiális pozíció [m]")
     plt.axis([r_min, r_max, q_min, q_max])
     plt.legend()
     plt.show()
@@ -185,7 +192,7 @@ def main():
     beamDescription = BeamDescription.get_description_from_files(
         open("beamdescription/beam_1_profile.dat", "r"),
         open("beamdescription/beam.dat", "r"))
-    calculator = BeamCalculator(beamDescription, 1, 50, r=5, neutralization_point=50)
+    calculator = BeamCalculator(beamDescription, 1, 50, r=5, neutralization_range=[50, 70])
     beam = calculator.calculate_beam(r_resolution=100, z_interval=1)
     plot_beam(beam)
     # plot_FI(beam)
