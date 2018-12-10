@@ -28,20 +28,22 @@ class Beam:
 
         self.result_shapes = []
         self.result_positions = np.zeros(shape=(len(z), len(start_positions)))
+        self.result_background = np.zeros(shape=(len(z), len(start_positions)))
         self.result_densities = np.zeros(shape=(len(z), len(start_positions)))
         self.FI = np.zeros(shape=(len(z), len(start_positions)))
 
-    def append_result(self, shape, FI, current_index):
+    def append_result(self, shape, FI, background, current_index):
         self.result_shapes.append(Shape(shape.positions, shape.values, shape.Q))
         self.result_positions[current_index] = shape.positions
         self.result_densities[current_index] = shape.values
+        self.result_background[current_index] = background
         self.FI[current_index] = FI
 
     def start_shape(self):
-        return self.result_positions[0], self.result_densities[0]/self.dt
+        return self.result_shapes[0].positions, self.result_shapes[0].values/self.dt
 
     def end_shape(self):
-        return self.result_positions[-1], self.result_densities[-1]/self.dt
+        return self.result_shapes[-1].positions, self.result_shapes[-1].values/self.dt
 
     def before_neutralization_shape(self):
         if self.neutralization_index == np.inf:

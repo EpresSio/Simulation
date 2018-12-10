@@ -192,7 +192,7 @@ def main():
     beamDescription = BeamDescription.get_description_from_files(
         open("beamdescription/beam_1_profile.dat", "r"),
         open("beamdescription/beam.dat", "r"))
-    calculator = BeamCalculator(beamDescription, 1, 50, r=5, neutralization_range=[50, 70])
+    calculator = BeamCalculator(beamDescription, 1, 50, r=5, neutralization_range=[50, 70], e_v_r=0)
     beam = calculator.calculate_beam(r_resolution=100, z_interval=1)
     plot_beam(beam)
     # plot_FI(beam)

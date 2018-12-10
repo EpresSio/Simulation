@@ -13,7 +13,7 @@ from Shape import Shape
 class BeamCalculator:
     # current [mA], energy [keV],r [cm], n_p [cm]
     def __init__(self, beam_descriptor, current, energy, particle="Li_7", r=2.5, neutralization_range=[np.inf, np.inf],
-                 gas_density=2.5e17):
+                 gas_density=2.5e17, e_v_r=0):
         self.beam_descriptor = beam_descriptor
         self.energy = energy
         self.r = r * 1e-2
@@ -30,7 +30,7 @@ class BeamCalculator:
         self.dt = 0
         self.Q = 0
 
-        self.e_v_r = 1e6
+        self.e_v_r = e_v_r
 
         self.log(beam_descriptor, current, energy, neutralization_range)
 
@@ -78,8 +78,8 @@ class BeamCalculator:
             v_r_field = np.zeros(r_resolution)
 
         # set up Z direction array
-        start_point = self.beam_descriptor.start_points
-        end_point = self.beam_descriptor.end_points
+        start_point = self.beam_descriptor.start_points[0]
+        end_point = self.beam_descriptor.end_points[0]
         z = np.arange(start=start_point, stop=end_point + z_interval, step=z_interval)
 
         # set up neutralization logic
@@ -91,26 +91,52 @@ class BeamCalculator:
         # return with the new density point positions
         return beam
 
-    def calculate(self, shape, start_point, z, z_interval, v_r_field, neutralization_rate, neutralization_step):
+    def calculate(self, input_shape, start_point, z, z_interval, v_r_field, neutralization_rate, input_neutralization_step):
         # create the beam
-        beam = Beam(self, z, shape.positions)
-        E = []
-        actual_z = start_point
         # do the steps
-        for index in range(len(z)):
-            actual_z = actual_z + z_interval
-            # print("Actual position: " + str(index * 1e2) + " cm")
-            if actual_z < self.neutralization_range[1]:
-                if actual_z > self.neutralization_range[0]:
-                    shape.values = shape.values - neutralization_step * (shape.values / neutralization_rate)
-                    neutralization_step = neutralization_step + 1
-                shape.positions, v_r_field, E = self.step(shape, v_r_field, self.dt, self.mass_per_q_ratio)
-                shape.values = shape.Q / np.trapz(shape.values, shape.positions) * shape.values
-            else:
-                shape.positions = self.step_after_neutralization(shape.positions, v_r_field, self.dt)
-                shape.values = shape.Q / np.trapz(shape.values, shape.positions) * shape.values
+        e_background = []
+        prev_beam = None
+        beams = []
+        if self.e_v_r == 0:
+            recalculate_number = 0
+        else:
+            recalculate_number = len(z)
+        recalculate_number = 2
+        for recal in range(recalculate_number):
+            print(str(recal + 1) + " of " + str(recalculate_number) + " started.")
+            shape = input_shape.copy_shape()
+            beam = Beam(self, z, shape.positions)
+            E = []
+            actual_z = start_point
+            neutralization_step = input_neutralization_step
+            copy_v_r_field = np.zeros(len(v_r_field))
+            for i in range(len(v_r_field)):
+                copy_v_r_field[i] = v_r_field[i]
+            for index in range(len(z)):
+                if prev_beam is not None:
+                    background_density = prev_beam.result_background[index]
+                    # background_density = np.zeros(shape.positions.shape)
+                else:
+                    background_density = np.zeros(shape.positions.shape)
+                actual_z = actual_z + z_interval
+                # print("Actual position: " + str(index * 1e2) + " cm")
+                if actual_z < self.neutralization_range[1]:
+                    if actual_z > self.neutralization_range[0]:
+                        shape.values = shape.values - neutralization_step * (shape.values / neutralization_rate)
+                        neutralization_step = neutralization_step + 1
+                        # background_density = np.zeros(shape.positions.shape)
+                    shape.positions, copy_v_r_field, E, e_background = self.step(shape, copy_v_r_field, self.dt,
+                                                                            self.mass_per_q_ratio, background_density)
+                    shape.values = shape.Q / np.trapz(shape.values, shape.positions) * shape.values
+                else:
+                    shape.positions = self.step_after_neutralization(shape.positions, copy_v_r_field, self.dt)
+                    shape.values = shape.Q / np.trapz(shape.values, shape.positions) * shape.values
 
-            beam.append_result(shape, self.calculateFI(E, shape.positions), index)
+                beam.append_result(shape, self.calculateFI(E, shape.positions), e_background.values +
+                                   background_density, index)
+                beams.append(beam)
+            prev_beam = beam
+        beam.result_shapes[0] = beams[0].result_shapes[0]
         return beam
 
     @staticmethod
@@ -120,11 +146,13 @@ class BeamCalculator:
             FI[i] = -np.trapz(E[:i], positions[:i])
         return FI
 
-    def step(self, shape, v_r_field, dt, mass_per_q_ratio):
+    def step(self, shape, v_r_field, dt, mass_per_q_ratio, background_density):
         r = shape.positions
         density_values = shape.values
         electron_density_values = density_values * self.electron_factor
         density_values = density_values - electron_density_values
+
+        density_values = density_values + background_density
 
         # calculate E_r from density profile
         E = self.E_r(r, density_values)
@@ -140,7 +168,7 @@ class BeamCalculator:
         result_r = self.q_profile(r, result_velocity_field, dt)
 
         # return with the new positions and new v_r field
-        return result_r, result_velocity_field, E
+        return result_r, result_velocity_field, E, e
 
     def step_after_neutralization(self, r, v_r_field, dt):
         result_r = self.q_profile(r, v_r_field, dt)
@@ -219,19 +247,8 @@ class BeamCalculator:
         e_shape = Shape(positions, electron_density_values, np.trapz(electron_density_values, positions))
         e_q = 1.602176487e-19  # C
         e_m = 9.10938215e-31  # kg
-        e_Q = np.zeros(positions.shape)
-        e_M = np.zeros(positions.shape)
-        E_kin = np.zeros(positions.shape)
+        E_kin = np.full(positions.shape, e_v_r ** 2 * e_m * 1 / 2)
         FI = -1 * FI
-        for i in range(len(positions)):
-            e_kin = e_v_r ** 2 * e_m * 1 / 2
-            if i > 0:
-                Q = electron_density_values[i] * (positions[i] - positions[i - 1])
-                e_Q[i] = Q
-                e_M[i] = Q * e_m / e_q
-                E_kin[i] = e_kin
-            else:
-                E_kin[i] = e_kin
 
         E = np.zeros(E_kin.shape)
         E_pot = np.zeros(E_kin.shape)
@@ -240,7 +257,7 @@ class BeamCalculator:
             E[i] = E_kin[i] + E_pot[i]
 
         for i in range(len(E)):
-            if E[i] > (np.max(FI) - FI[0])* e_q:
+            if E[i] > (np.max(FI) - FI[0]) * e_q:
                 E[i] = 0
                 e_shape.values[i] = 0
 
@@ -252,15 +269,19 @@ class BeamCalculator:
 
         v_0_r = np.zeros(E_kin.shape)
         for i in range(len(E_kin)):
-            v_0_r[i] = np.sqrt(2 * E[i]/e_m)
+            v_0_r[i] = np.sqrt(2 * E[i] / e_m)
 
         n = np.zeros(v_0_r.shape)
         for i in range(len(E_kin)):
             if v_0_r[i] != 0:
-                n[i] = 1/v_0_r[i]
+                n[i] = 1 / v_0_r[i]
 
-        e_shape.values = e_shape.Q / np.trapz(n, e_shape.positions) * e_shape.values
-        plt.plot(e_shape.positions, n)
-        plt.show()
+        area = np.trapz(n, e_shape.positions)
+        if area == 0:
+            e_shape.values = np.zeros(e_shape.values.shape)
+        else:
+            e_shape.values = e_shape.Q / area * e_shape.values
+        # plt.plot(e_shape.positions, n)
+        # plt.show()
         # sys.exit(0)
-        print("")
+        return e_shape
